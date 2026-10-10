@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#c2185b">
+  <title>لوحة القيادة الإدارية</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/crossfilter2@1.5.4/crossfilter.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+</head>
+<body dir="rtl">
+
+  <header class="topbar">
+    <button id="menuBtn" class="icon-btn" aria-label="القائمة">☰</button>
+    <h1 class="topbar-title">لوحة القيادة<span class="status-text" id="statusText"></span></h1>
+    <div class="topbar-actions">
+      <button id="darkModeBtn" class="icon-btn" aria-label="الوضع الليلي">🌙</button>
+      <button id="refreshBtn" class="icon-btn" aria-label="تحديث">⟳</button>
+    </div>
+  </header>
+
+  <nav id="sideNav" class="side-nav">
+    <div class="side-nav-header">📊 القائمة</div>
+    <button class="nav-item active" data-page="overview">🏠 نظرة عامة</button>
+    <button class="nav-item" data-page="clients">👤 الزبائن</button>
+    <button class="nav-item" data-page="shipments">🚚 الشحنات</button>
+    <button class="nav-item" data-page="revenue">💰 المداخيل</button>
+    <button class="nav-item" data-page="visits">📍 الزيارات</button>
+    <button class="nav-item" data-page="analytics">📈 تحليلات متقدمة</button>
+  </nav>
+  <div id="navOverlay" class="nav-overlay"></div>
+
+  <main id="content" class="content">
+    <div id="filterBar" class="filter-bar" style="display:none;"></div>
+    <div id="boot" class="loading"><div class="spinner"></div><p>جاري التحميل…</p></div>
+
+    <section id="page-overview" class="page"><div id="content-overview"></div></section>
+    <section id="page-clients" class="page" style="display:none;"><div id="content-clients"></div></section>
+    <section id="page-shipments" class="page" style="display:none;"><div id="content-shipments"></div></section>
+    <section id="page-revenue" class="page" style="display:none;"><div id="content-revenue"></div></section>
+    <section id="page-visits" class="page" style="display:none;"><div id="content-visits"></div></section>
+    <section id="page-analytics" class="page" style="display:none;"><div id="content-analytics"></div></section>
+  </main>
+
+  <button id="searchFab" class="search-fab" style="display:none;">🔍</button>
+  <div id="searchPanel" class="search-panel">
+    <input type="text" id="clientSearchInput" dir="auto" placeholder="ابحث بالاسم أو الكود..." autocomplete="off">
+  </div>
+
+  <script src="config.js"></script>
+  <script src="data.js"></script>
+  <script src="charts.js"></script>
+  <script src="pages.js"></script>
+  <script src="clients.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
