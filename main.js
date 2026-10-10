@@ -173,8 +173,29 @@ async function fetchAndApply(force) {
   }
 }
 
+// ---------- PWA: تسجيل service worker + زر التثبيت ----------
+let deferredInstall = null;
+function setupPwa() {
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW:', e));
+  }
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredInstall = e;
+    $('installBtn').style.display = '';
+  });
+  $('installBtn').addEventListener('click', async () => {
+    if (!deferredInstall) return;
+    deferredInstall.prompt();
+    await deferredInstall.userChoice.catch(() => {});
+    deferredInstall = null;
+    $('installBtn').style.display = 'none';
+  });
+  window.addEventListener('appinstalled', () => { $('installBtn').style.display = 'none'; });
+}
+
 async function init() {
-  setupDark(); setupNav(); initFab();
+  setupPwa(); setupDark(); setupNav(); initFab();
   $('refreshBtn').addEventListener('click', () => fetchAndApply(true));
   $('searchFab').style.display = 'none';
 

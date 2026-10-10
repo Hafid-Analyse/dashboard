@@ -394,13 +394,15 @@
   .suggest-chip:first-child { background: var(--primary); color: #fff; border-color: var(--primary); font-weight: 600; }
 
 /* ===================== إضافات النسخة الجديدة ===================== */
+:root { --topbar-h: calc(64px + env(safe-area-inset-top, 0px)); }
+.topbar { padding-top: calc(14px + env(safe-area-inset-top, 0px)); }
 .status-text { font-size: 11px; opacity: .85; display: block; font-weight: 400; margin-top: 2px; }
 .topbar-title { line-height: 1.2; }
 .content { padding-bottom: 90px; }
 
 /* شريط الفلاتر العام */
 .filter-bar {
-  position: sticky; top: 64px; z-index: 15;
+  position: sticky; top: var(--topbar-h); z-index: 15;
   background: var(--bg); padding: 10px 16px 6px; margin: 0 -16px 8px;
 }
 .fb-row { display: flex; gap: 8px; align-items: stretch; }
@@ -520,7 +522,7 @@ details summary { cursor: pointer; color: var(--text-muted); }
   .topbar { border-radius: 0; }
   #menuBtn { display: none; }
   .nav-overlay { display: none !important; }
-  .side-nav { right: 0; top: 64px; height: calc(100% - 64px); width: 220px; box-shadow: none; border-left: 1px solid var(--border); z-index: 10; }
+  .side-nav { right: 0; top: var(--topbar-h); height: calc(100% - var(--topbar-h)); width: 220px; box-shadow: none; border-left: 1px solid var(--border); z-index: 10; }
   .content { max-width: none; margin: 0; padding: 18px 252px 90px 32px; }
   .page > div { max-width: 1240px; margin: 0 auto; }
   .filter-bar { margin: 0 0 10px; padding: 10px 0 6px; }

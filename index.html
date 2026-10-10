@@ -2,12 +2,21 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#c2185b">
+  <meta name="application-name" content="لوحة القيادة">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="لوحة القيادة">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="icons/favicon.svg">
+  <link rel="icon" type="image/png" sizes="48x48" href="icons/favicon-48.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <title>لوحة القيادة الإدارية</title>
   <link rel="stylesheet" href="style.css">
-  <script src="https://cdn.jsdelivr.net/npm/crossfilter2@1.5.4/crossfilter.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+  <script src="vendor/crossfilter.min.js"></script>
+  <script src="vendor/echarts.min.js"></script>
 </head>
 <body dir="rtl">
 
@@ -15,6 +24,7 @@
     <button id="menuBtn" class="icon-btn" aria-label="القائمة">☰</button>
     <h1 class="topbar-title">لوحة القيادة<span class="status-text" id="statusText"></span></h1>
     <div class="topbar-actions">
+      <button id="installBtn" class="icon-btn" aria-label="تثبيت التطبيق" title="تثبيت التطبيق" style="display:none;">📲</button>
       <button id="darkModeBtn" class="icon-btn" aria-label="الوضع الليلي">🌙</button>
       <button id="refreshBtn" class="icon-btn" aria-label="تحديث">⟳</button>
     </div>
