@@ -19,7 +19,11 @@ function buildCrossfilter() {
   CF.pays = mk(DATA.pays, { rep: r => r.rep, code: r => r.code });
   CF.visits = mk(DATA.visits, { rep: r => r.rep });
 
-  const sumNK = { add: (p, r) => { p.n++; p.k += r.colis; return p; }, rem: (p, r) => { p.n--; p.k -= r.colis; return p; }, ini: () => ({ n: 0, k: 0 }) };
+  const sumNK = {
+    add: (p, r) => { p.n++; p.k += r.colis; if (r.hasCall) { p.tot++; if (r.confirmed) p.yes++; } return p; },
+    rem: (p, r) => { p.n--; p.k -= r.colis; if (r.hasCall) { p.tot--; if (r.confirmed) p.yes--; } return p; },
+    ini: () => ({ n: 0, k: 0, yes: 0, tot: 0 })
+  };
   CF.ships.trend = CF.ships.ym.group().reduce(sumNK.add, sumNK.rem, sumNK.ini);
   CF.ships.byWilaya = CF.ships.wilaya.group();
   CF.ships.byTransport = CF.ships.transport.group();
@@ -85,6 +89,9 @@ function topOf(group, valueFn, limit) {
 }
 
 // ---------- ECharts ----------
+const GOOD = '#35e2a4', BAD = '#ff5c72';
+
+function isDark() { return document.body.classList.contains('dark'); }
 function themeColors() {
   const cs = getComputedStyle(document.body);
   const g = n => cs.getPropertyValue(n).trim();
@@ -114,40 +121,56 @@ function mountChart(el, option, onClick, onCategory) {
   return inst;
 }
 
-window.addEventListener('resize', () => {
+function resizeAllCharts() {
   document.querySelectorAll('.chart').forEach(el => {
     const inst = echarts.getInstanceByDom(el);
     if (inst) inst.resize();
   });
-});
+}
+window.addEventListener('resize', resizeAllCharts);
 
 const BASE_TEXT = () => { const t = themeColors(); return { color: t.text, fontFamily: 'Segoe UI, Tahoma, Arial, sans-serif' }; };
 
-/** أعمدة أفقية؛ العناصر المختارة (selSet) تبقى بلون كامل والباقي يخفت */
+function compact(v) {
+  v = Math.abs(v) >= 1 ? v : 0;
+  if (Math.abs(v) >= 1e6) return (v / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (Math.abs(v) >= 1e3) return Math.round(v / 1e3) + 'k';
+  return String(Math.round(v));
+}
+
+/**
+ * أعمدة أفقية بلون واحد (اللون للدلالة لا للزينة).
+ * opts.selected: العناصر المختارة تبقى بكامل لونها والباقي يخفت.
+ * opts.signed: موجب أخضر وسالب أحمر (للتغيّرات).
+ */
 function barOption(items, opts) {
   opts = opts || {};
   const t = themeColors();
   const sel = opts.selected && opts.selected.size ? opts.selected : null;
+  const fmt = opts.fmt || fmtNum;
+  const base = opts.color || t.primary;
   return {
     textStyle: BASE_TEXT(),
     grid: { left: 8, right: 70, top: 6, bottom: 6, containLabel: true },
-    tooltip: { trigger: 'item', confine: true, formatter: p => esc(p.name) + '<br/><b>' + (opts.fmt || fmtNum)(p.value) + '</b>' },
+    tooltip: { trigger: 'item', confine: true, formatter: p => esc(p.name) + '<br/><b>' + fmt(p.value) + '</b>' },
     xAxis: { type: 'value', show: false },
     yAxis: {
       type: 'category', inverse: true, data: items.map(i => i.name),
-      axisLine: { show: false }, axisTick: { show: false },
-      axisLabel: { color: t.muted, width: 90, overflow: 'truncate', fontSize: 12 }
+      axisLine: { show: false, onZero: false }, axisTick: { show: false },
+      axisLabel: { color: t.muted, width: 100, overflow: 'truncate', fontSize: 12 }
     },
     series: [{
       type: 'bar', barMaxWidth: 16,
-      data: items.map((it, i) => ({
+      data: items.map(it => ({
         value: it.value,
         itemStyle: {
-          color: PALETTE[i % PALETTE.length], borderRadius: [0, 6, 6, 0],
+          color: opts.signed ? (it.value >= 0 ? GOOD : BAD) : base,
+          borderRadius: it.value >= 0 ? [0, 6, 6, 0] : [6, 0, 0, 6],
           opacity: sel && !sel.has(it.name) ? 0.28 : 1
-        }
+        },
+        label: { position: it.value >= 0 ? 'right' : 'left' }
       })),
-      label: { show: true, position: 'right', color: t.text, fontSize: 11, formatter: p => (opts.fmt || fmtNum)(p.value) },
+      label: { show: true, color: t.text, fontSize: 11, formatter: p => (opts.signed && p.value > 0 ? '+' : '') + fmt(p.value) },
       emphasis: { focus: 'self' }
     }]
   };
@@ -155,57 +178,117 @@ function barOption(items, opts) {
 
 function barHeight(n) { return Math.max(120, n * 34 + 16); }
 
-/** منحنى ناعم بمساحة متدرجة؛ النقر على نقطة يختار ذلك الشهر */
-function trendOption(labels, series) {
+/**
+ * منحنى ناعم. opts.partial (افتراضي true): آخر نقطة = شهر لم يكتمل فتُرسم بخط متقطع
+ * وتسمية "حتى اليوم" حتى لا يبدو الهبوط الأخير حقيقيًا.
+ * series[i].axis = 1 يضع السلسلة على محور ثانٍ (يمين).
+ */
+function trendOption(labels, series, opts) {
+  opts = opts || {};
   const t = themeColors();
+  const partial = opts.partial !== false && labels.length > 1;
+  const last = labels.length - 1;
+  const fmt = opts.fmt || fmtNum;
+  const dual = series.some(s => s.axis === 1);
+  const single = series.length === 1;
+  const axisFmt = v => opts.pct ? v + '%' : compact(v);
+
+  const out = [];
+  series.forEach(s => {
+    const base = { name: s.name, type: 'line', smooth: true, symbolSize: 8, yAxisIndex: s.axis || 0, itemStyle: { color: s.color }, connectNulls: false };
+    const area = single ? { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: s.color + '55' }, { offset: 1, color: s.color + '00' }]) } : undefined;
+    if (!partial) { out.push({ ...base, data: s.data, lineStyle: { width: 3, color: s.color }, areaStyle: area }); return; }
+    out.push({ ...base, data: s.data.map((v, i) => i === last ? null : v), lineStyle: { width: 3, color: s.color }, areaStyle: area });
+    out.push({
+      ...base, name: s.name + ' (غير مكتمل)',
+      data: s.data.map((v, i) => i === last - 1 ? { value: v, symbolSize: 0 } : (i === last ? v : null)),
+      lineStyle: { width: 3, type: 'dashed', color: s.color }, areaStyle: area
+    });
+  });
+
+  const yAxisBase = (color, show) => ({
+    type: 'value', min: 0, max: opts.yMax, splitLine: { show, lineStyle: { color: t.border } },
+    axisLabel: { color: color, fontSize: 10.5, formatter: axisFmt }
+  });
+  const colors = series.map(s => s.color);
   return {
     textStyle: BASE_TEXT(),
-    color: series.map(s => s.color),
-    grid: { left: 10, right: 14, top: series.length > 1 ? 34 : 14, bottom: 4, containLabel: true },
-    legend: series.length > 1 ? { top: 0, textStyle: { color: t.muted } } : undefined,
-    tooltip: { trigger: 'axis', confine: true, valueFormatter: v => fmtNum(v) },
-    xAxis: { type: 'category', data: labels, boundaryGap: false, axisLine: { lineStyle: { color: t.border } }, axisLabel: { color: t.muted, fontSize: 10, interval: 0 } },
-    yAxis: { type: 'value', splitLine: { lineStyle: { color: t.border } }, axisLabel: { color: t.muted, fontSize: 10.5, formatter: v => v >= 1000000 ? (v / 1000000) + 'M' : (v >= 1000 ? (v / 1000) + 'k' : v) } },
-    series: series.map(s => ({
-      name: s.name, type: 'line', smooth: true, symbolSize: 8, data: s.data, yAxisIndex: 0,
-      lineStyle: { width: 3, color: s.color }, itemStyle: { color: s.color },
-      areaStyle: series.length === 1 ? { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: s.color + '55' }, { offset: 1, color: s.color + '00' }]) } : undefined
-    }))
+    grid: { left: 10, right: partial ? 34 : 14, top: single ? 14 : 34, bottom: 4, containLabel: true },
+    legend: single ? undefined : { top: 0, data: series.map(s => s.name), textStyle: { color: t.muted } },
+    tooltip: {
+      trigger: 'axis', confine: true,
+      formatter: ps => {
+        const idx = ps[0].dataIndex, seen = {};
+        let h = '<b>' + esc(labels[idx]) + '</b>';
+        ps.forEach(p => {
+          const nm = p.seriesName.replace(' (غير مكتمل)', '');
+          if (seen[nm] || p.value === null || p.value === undefined) return;
+          seen[nm] = 1;
+          h += '<br/>' + p.marker + esc(nm) + ': <b>' + fmt(p.value) + '</b>' + (partial && idx === last ? ' <span style="opacity:.7">(حتى اليوم)</span>' : '');
+        });
+        return h;
+      }
+    },
+    xAxis: {
+      type: 'category', boundaryGap: false,
+      data: labels.map((l, i) => partial && i === last ? l + '\n(حتى اليوم)' : l),
+      axisLine: { lineStyle: { color: t.border } }, axisLabel: { color: t.muted, fontSize: 10, interval: 0 }
+    },
+    yAxis: dual ? [yAxisBase(colors[0], true), { ...yAxisBase(colors[1] || t.muted, false) }] : yAxisBase(t.muted, true),
+    series: out
   };
 }
 
-function donutOption(pct, color, sub) {
-  const t = themeColors();
-  return {
-    textStyle: BASE_TEXT(),
-    title: { text: Math.round(pct || 0) + '%', left: 'center', top: 'center', textStyle: { color: t.text, fontSize: 24, fontWeight: 800 } },
-    series: [{
-      type: 'pie', radius: ['68%', '88%'], silent: true, label: { show: false },
-      data: [
-        { value: pct || 0, itemStyle: { color: color, borderRadius: 8 } },
-        { value: Math.max(0, 100 - (pct || 0)), itemStyle: { color: t.border } }
-      ]
-    }]
-  };
-}
-
-/** أعمدة أفقية مكدّسة (حالات الزيارات لكل منطقة) */
-function stackedOption(rows, defs, selected) {
+/** أعمدة أفقية مكدّسة بالنسبة المئوية (100% لكل منطقة) مع العدد الفعلي في التلميح */
+function stackedPctOption(rows, defs, selected) {
   const t = themeColors();
   const sel = selected && selected.size ? selected : null;
   return {
     textStyle: BASE_TEXT(),
     grid: { left: 8, right: 14, top: 30, bottom: 6, containLabel: true },
     legend: { top: 0, textStyle: { color: t.muted, fontSize: 11 }, itemWidth: 10, itemHeight: 10 },
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, confine: true },
-    xAxis: { type: 'value', show: false },
+    tooltip: {
+      trigger: 'axis', axisPointer: { type: 'shadow' }, confine: true,
+      formatter: ps => {
+        const r = rows[ps[0].dataIndex];
+        let h = '<b>' + esc(r.region) + '</b> — ' + r.total + ' زبون';
+        defs.forEach(d => { h += '<br/><span style="color:' + d.color + '">●</span> ' + d.label + ': <b>' + r[d.key] + '</b> (' + (r.total ? Math.round(r[d.key] / r.total * 100) : 0) + '%)'; });
+        return h;
+      }
+    },
+    xAxis: { type: 'value', show: false, max: 100 },
     yAxis: { type: 'category', inverse: true, data: rows.map(r => r.region), axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: t.muted, fontSize: 12 } },
     series: defs.map(d => ({
-      name: d.label, type: 'bar', stack: 'v', barMaxWidth: 20,
+      name: d.label, type: 'bar', stack: 'v', barMaxWidth: 22,
       itemStyle: { color: d.color },
-      data: rows.map(r => ({ value: r[d.key], itemStyle: { opacity: sel && !sel.has(r.region) ? 0.28 : 1 } })),
+      data: rows.map(r => ({ value: r.total ? r[d.key] / r.total * 100 : 0, itemStyle: { opacity: sel && !sel.has(r.region) ? 0.28 : 1 } })),
       emphasis: { focus: 'series' }
     }))
+  };
+}
+
+/** خريطة حرارية: صفوف = مناطق، أعمدة = أشهر */
+function heatmapOption(rowNames, colLabels, matrix, max, fmt, selectedRows) {
+  const t = themeColors();
+  const dark = isDark();
+  const sel = selectedRows && selectedRows.size ? selectedRows : null;
+  return {
+    textStyle: BASE_TEXT(),
+    grid: { left: 8, right: 8, top: 6, bottom: 4, containLabel: true },
+    tooltip: { confine: true, formatter: p => esc(rowNames[p.value[1]]) + ' — ' + esc(colLabels[p.value[0]]) + '<br/><b>' + (fmt || fmtNum)(p.value[2]) + '</b>' },
+    xAxis: { type: 'category', data: colLabels, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: t.muted, fontSize: 10, interval: 0 } },
+    yAxis: { type: 'category', data: rowNames, inverse: true, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: t.muted, fontSize: 12 } },
+    visualMap: { show: false, min: 0, max: Math.max(1, max), inRange: { color: dark ? ['#3a2230', '#ff8fab'] : ['#fde4ee', '#c2185b'] } },
+    series: [{
+      type: 'heatmap',
+      data: matrix.map(m => ({
+        value: m,
+        itemStyle: { opacity: sel && !sel.has(rowNames[m[1]]) ? 0.3 : 1 },
+        label: { color: (m[2] / Math.max(1, max)) > 0.55 ? (dark ? '#2a1420' : '#fff') : t.text }
+      })),
+      label: { show: true, fontSize: 10, formatter: p => p.value[2] ? compact(p.value[2]) : '' },
+      itemStyle: { borderColor: t.surface, borderWidth: 3, borderRadius: 6 }
+    }]
   };
 }
 
@@ -216,6 +299,7 @@ function chartBox(id, height, title) {
 }
 function statRow(items) {
   return '<div class="client-stats">' + items.map(i =>
-    '<div class="stat-chip"><div class="stat-value">' + i.value + '</div><div class="stat-label">' + i.label + '</div></div>').join('') + '</div>';
+    '<div class="stat-chip' + (i.cls ? ' ' + i.cls : '') + '"><div class="stat-value">' + i.value + '</div><div class="stat-label">' + i.label + '</div></div>').join('') + '</div>';
 }
+function grid2(a, b) { return '<div class="grid-2"><div>' + a + '</div><div>' + b + '</div></div>'; }
 function toggleIn(set, v) { if (set.has(v)) set.delete(v); else set.add(v); }

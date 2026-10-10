@@ -252,48 +252,37 @@ function renderAnalytics() {
   const repPerf = Object.keys(rep).map(k => ({ rep: k, total: rep[k].total, done: rep[k].done, pct: rep[k].total ? Math.round(rep[k].done / rep[k].total * 100) : 0 })).sort((a, b) => b.total - a.total);
 
   const debtRisk = desc(enriched.filter(c => c.creance > 0).map(c => ({ ...c, ratio: c.creance / (c.paymentsTotal || 1) })), c => c.ratio).slice(0, 15);
-  const mx = f => Math.max(1, ...enriched.map(f));
-  const mS = mx(c => c.shipments6m), mP = mx(c => c.paymentsTotal), mV = mx(c => c.visitsTotal);
-  const best = desc(enriched.map(c => ({ ...c, comp: c.shipments6m / mS + c.paymentsTotal / mP + c.visitsTotal / mV })), c => c.comp).slice(0, 15);
   const risk = desc(enriched.filter(c => c.shipments6m >= 3 && c.shipmentsThis === 0 && c.visits60d === 0), c => c.shipments6m).slice(0, 15);
   const newCount = enriched.filter(c => c.daysSinceCreated !== null && c.daysSinceCreated <= 90).length;
-
-  const rm = {};
-  enriched.forEach(c => {
-    const o = rm[c.region] || (rm[c.region] = { total: 0, inactive: 0, ship: 0, pay: 0, vis: 0 });
-    o.total++; if (c.daysSinceLastSale === null || c.daysSinceLastSale > 90) o.inactive++;
-    o.ship += c.shipments6m; o.pay += c.paymentsTotal; o.vis += c.visitsTotal;
-  });
-  const rs = Object.values(rm);
-  const rMS = Math.max(1, ...rs.map(r => r.ship)), rMP = Math.max(1, ...rs.map(r => r.pay)), rMV = Math.max(1, ...rs.map(r => r.vis));
-  const regionRank = Object.keys(rm).map(k => ({ region: k, ...rm[k], score: rm[k].ship / rMS + rm[k].pay / rMP + rm[k].vis / rMV })).sort((a, b) => b.score - a.score);
 
   const item = (c, label) => '<button class="ranked-item clickable" data-client="' + esc(c.code) + '"><span class="rank-name">' + esc(c.name) +
     ' <span class="rank-sub">' + esc(c.region || '') + '</span></span><span class="rank-value">' + label + '</span></button>';
   const block = (title, arr, empty) => '<h3 class="section-title">' + title + '</h3>' +
     (arr.length ? '<div class="ranked-list">' + arr.join('') + '</div>' : '<p class="muted">' + empty + '</p>');
 
-  let html = '<p class="period-note">📍 ' + esc(regionLabel()) + '</p>';
-  html += block('🏆 الزبائن الأكثر نشاطًا (6 أشهر)', mostActive.map(c => item(c, c.score + ' نقطة نشاط')), 'لا توجد بيانات');
+  let html = '<p class="period-note">📍 ' + esc(regionLabel()) + '</p><div class="analytics-cols">';
+  html += block('🏆 الزبائن الأكثر حركة (شحنات 6 أشهر + كل الزيارات والدفعات)', mostActive.map(c => item(c, c.score + ' عملية')), 'لا توجد بيانات');
   html += '<h3 class="section-title">⏸️ توقفوا عن الشراء</h3>' + statRow([
     { label: 'أكثر من 30 يوم', value: fmtNum(stopped(30)) }, { label: 'أكثر من 60 يوم', value: fmtNum(stopped(60)) }, { label: 'أكثر من 90 يوم', value: fmtNum(stopped(90)) }]);
   html += block('الأطول توقفًا', stoppedList.map(c => item(c, c.daysSinceLastSale + ' يوم')), 'لا يوجد');
-  html += block('📈 نشاط متزايد هذا الشهر', increasing.map(c => item(c, '+' + c.delta + ' شحنة')), 'لا يوجد تغيّر ملحوظ');
-  html += block('📉 نشاط متناقص هذا الشهر', decreasing.map(c => item(c, c.delta + ' شحنة')), 'لا يوجد تغيّر ملحوظ');
+  const diverge = increasing.concat(decreasing.slice().reverse());
+  html += '<h3 class="section-title">📊 تغيّر نشاط الشحن: هذا الشهر مقابل الشهر الماضي <span class="hint-text">(أخضر زيادة، أحمر نقص — اضغط على اسم لفتح بطاقته)</span></h3>' +
+    (diverge.length ? '<div class="chart-card"><div class="chart" id="anDiv" style="height:' + barHeight(diverge.length) + 'px"></div></div>' : '<p class="muted">لا يوجد تغيّر ملحوظ</p>');
   html += block('📍 الأكثر زيارة', mostVisited.map(c => item(c, c.visitsTotal + ' زيارة')), 'لا توجد بيانات');
   html += block('⚠️ زيارات كثيرة بلا نشاط شحن (آخر 60 يوم)', visitedNoActivity.map(c => item(c, c.visits60d + ' زيارة، 0 شحنة')), 'لا يوجد — كل من تمت زيارته لديه نشاط 👍');
   html += '<h3 class="section-title">👥 أداء المناديب في المتابعة</h3>' + (repPerf.length
     ? '<div class="ranked-list">' + repPerf.map(r => '<div class="ranked-item"><span class="rank-name">' + esc(r.rep) + '</span><span class="rank-value">' + r.done + '/' + r.total + ' (' + r.pct + '%)</span></div>').join('') + '</div>'
     : '<p class="muted">لا توجد بيانات</p>');
   html += block('💸 ديون كبيرة مقارنة بالدفع (CREANCE مقابل المدفوع)', debtRisk.map(c => item(c, fmtNum(c.creance) + ' دج (× ' + c.ratio.toFixed(1) + ' من مدفوعاته)')), 'لا توجد ديون ملحوظة');
-  html += block('⭐ أفضل الزبائن (شحنات + دفعات + زيارات مجتمعة)', best.map(c => item(c, c.comp.toFixed(2))), 'لا توجد بيانات كافية');
   html += block('🚨 زبائن يمثلون خطر فقدان', risk.map(c => item(c, 'كان نشطًا (' + c.shipments6m + ' شحنة/6أشهر) — صفر هذا الشهر')), 'لا يوجد زبائن في خطر حاليًا 👍');
   html += '<h3 class="section-title">🆕 زبائن جدد مقابل قدامى</h3>' + statRow([
     { label: 'جدد (آخر 90 يوم)', value: fmtNum(newCount) }, { label: 'قدامى', value: fmtNum(enriched.length - newCount) }]);
-  html += '<h3 class="section-title">🗺️ ترتيب المناطق حسب الأداء المركّب</h3><div class="ranked-list">' + regionRank.map((r, i) =>
-    '<div class="ranked-item"><span class="rank">' + (i + 1) + '</span><span class="rank-name">' + esc(r.region) +
-    ' <span class="rank-sub">' + r.total + ' زبون، ' + r.inactive + ' غير نشط</span></span><span class="rank-value">' + r.score.toFixed(2) + '</span></div>').join('') + '</div>';
+  html += '</div><h3 class="section-title">🧪 جودة البيانات</h3>' + dataQualityHtml();
 
   $('content-analytics').innerHTML = html;
+  if (diverge.length) {
+    mount('anDiv', barOption(diverge.map(c => ({ name: c.name, value: c.delta, code: c.code })), { signed: true, fmt: v => String(v) }),
+      p => { const c = diverge[p.dataIndex]; if (c) openClient(c.code); });
+  }
   bindClientLinks($('content-analytics'));
 }
