@@ -57,7 +57,7 @@ function visitStatusOf(note) {
 function prepareData(p) {
   const clients = (p.clients || []).map(c => ({
     code: c.c, name: c.n || c.c, wilaya: c.w, ville: c.v, region: c.r || 'غير محدد',
-    tel: c.t, address: c.a, created: parseISO(c.d), lastSale: parseISO(c.s)
+    tel: c.t, address: c.a, created: parseISO(c.d), lastSale: parseISO(c.s), row: c.i || 0
   }));
   const clientByCode = {};
   clients.forEach(c => { clientByCode[c.code] = c; });
@@ -68,14 +68,14 @@ function prepareData(p) {
     return {
       date: d, ym: ymOf(d), day: d ? d.getDate() : 0, code: r.c, colis: r.k || 0,
       region: r.r || regOf(r.c) || 'غير محدد', wilaya: r.w || '', transport: r.t || '',
-      call: r.p || '', remark: r.m || '', hasCall: !!r.p, confirmed: isConfirmed(r.p)
+      call: r.p || '', remark: r.m || '', hasCall: !!r.p, confirmed: isConfirmed(r.p), row: r.i || 0
     };
   });
   const pays = (p.payments || []).map(r => {
     const d = parseISO(r.d);
     return {
       date: d, ym: ymOf(d), day: d ? d.getDate() : 0, code: r.c, amount: r.a || 0,
-      rep: r.p || 'غير محدد', clientName: r.n || '', region: regOf(r.c) || 'غير محدد'
+      rep: r.p || 'غير محدد', clientName: r.n || '', region: regOf(r.c) || 'غير محدد', row: r.i || 0
     };
   });
   const visits = (p.visits || []).map(r => {
@@ -83,7 +83,7 @@ function prepareData(p) {
     return {
       date: d, ym: ymOf(d), day: d ? d.getDate() : 0, ts: d ? d.getTime() : 0, code: r.c,
       note: r.n || '', rep: r.p || 'غير محدد', region: r.r || regOf(r.c) || 'غير محدد',
-      status: visitStatusOf(r.n), success: String(r.n || '').indexOf('تمت') !== -1
+      status: visitStatusOf(r.n), success: String(r.n || '').indexOf('تمت') !== -1, row: r.i || 0
     };
   });
   const bal = {};

@@ -100,23 +100,47 @@ function heatClickHandler(h) {
 function dataQualityIssues() {
   const known = DATA.clientByCode;
   const issues = [];
-  const add = (label, n) => { if (n > 0) issues.push({ label, n }); };
-  add('شحنات بلا تاريخ صالح', DATA.ships.filter(r => !r.date).length);
-  add('شحنات بلا كود زبون', DATA.ships.filter(r => !r.code).length);
-  add('شحنات بكود غير موجود في CLIENT', DATA.ships.filter(r => r.code && !known[r.code]).length);
-  add('دفعات بلا تاريخ صالح', DATA.pays.filter(r => !r.date).length);
-  add('دفعات بلا كود زبون (لا تُحسب لمنطقة)', DATA.pays.filter(r => !r.code).length);
-  add('دفعات بكود غير موجود في CLIENT', DATA.pays.filter(r => r.code && !known[r.code]).length);
-  add('زيارات بلا تاريخ صالح', DATA.visits.filter(r => !r.date).length);
-  add('زيارات بكود غير موجود في CLIENT', DATA.visits.filter(r => r.code && !known[r.code]).length);
-  add('زبائن بلا منطقة', DATA.clients.filter(c => c.region === 'غير محدد').length);
+  // كل ملاحظة تحمل صفوفها: السطر في الشيت + التاريخ + الزبون + تفصيل
+  const nameOf = (r, fallback) => (known[r.code] && known[r.code].name) || fallback || '';
+  const add = (label, sheet, rows, map) => {
+    if (!rows.length) return;
+    const items = rows.map(map).sort((a, b) => (a.row || 1e9) - (b.row || 1e9));
+    issues.push({ label, sheet, n: items.length, items });
+  };
+  const shipItem = r => ({ row: r.row, date: r.date, code: r.code, name: nameOf(r), info: r.colis ? r.colis + ' طرد' : '' });
+  const payItem = r => ({ row: r.row, date: r.date, code: r.code, name: nameOf(r, r.clientName), info: r.amount ? fmtNum(r.amount) + ' دج' : '' });
+  const visItem = r => ({ row: r.row, date: r.date, code: r.code, name: nameOf(r), info: r.rep && r.rep !== 'غير محدد' ? r.rep : '' });
+
+  add('شحنات بلا تاريخ صالح', 'GLOBAL', DATA.ships.filter(r => !r.date), shipItem);
+  add('شحنات بلا كود زبون', 'GLOBAL', DATA.ships.filter(r => !r.code), shipItem);
+  add('شحنات بكود غير موجود في CLIENT', 'GLOBAL', DATA.ships.filter(r => r.code && !known[r.code]), shipItem);
+  add('دفعات بلا تاريخ صالح', 'المداخيل', DATA.pays.filter(r => !r.date), payItem);
+  add('دفعات بلا كود زبون (لا تُحسب لمنطقة)', 'المداخيل', DATA.pays.filter(r => !r.code), payItem);
+  add('دفعات بكود غير موجود في CLIENT', 'المداخيل', DATA.pays.filter(r => r.code && !known[r.code]), payItem);
+  add('زيارات بلا تاريخ صالح', 'CustomerLog', DATA.visits.filter(r => !r.date), visItem);
+  add('زيارات بكود غير موجود في CLIENT', 'CustomerLog', DATA.visits.filter(r => r.code && !known[r.code]), visItem);
+  add('زبائن بلا منطقة', 'CLIENT', DATA.clients.filter(c => c.region === 'غير محدد'),
+    c => ({ row: c.row, date: c.created, code: c.code, name: c.name === c.code ? '' : c.name, info: c.wilaya || '' }));
   return issues;
 }
 function dataQualityHtml() {
   const is = dataQualityIssues();
   if (!is.length) return '<p class="muted">✅ لا توجد ملاحظات على جودة البيانات.</p>';
-  return '<div class="ranked-list">' + is.map(i =>
-    '<div class="ranked-item"><span class="rank-name">' + esc(i.label) + '</span><span class="rank-value warn">' + fmtNum(i.n) + '</span></div>').join('') + '</div>';
+  const LIMIT = 300;
+  return '<div class="dq-list">' + is.map(i => {
+    const shown = i.items.slice(0, LIMIT);
+    const noRows = i.items.every(x => !x.row);
+    return '<details class="dq-item"><summary><span class="rank-name">' + esc(i.label) +
+      ' <span class="rank-sub">' + esc(i.sheet) + '</span></span><span class="rank-value warn">' + fmtNum(i.n) + '</span></summary>' +
+      (noRows ? '<p class="muted">أرقام الأسطر تظهر بعد تحديث Code.gs ثم الضغط على ⟳.</p>' : '') +
+      '<div class="table-wrap"><table class="dq-table"><thead><tr><th>السطر</th><th>التاريخ</th><th>الزبون</th><th>تفصيل</th></tr></thead><tbody>' +
+      shown.map(x => '<tr><td>' + (x.row || '—') + '</td><td>' + (x.date ? esc(fmtDate(x.date)) : '—') + '</td><td>' +
+        (x.name ? esc(x.name) : '<span class="muted">بلا اسم</span>') + (x.code ? ' <span class="rank-sub">' + esc(x.code) + '</span>' : '') +
+        '</td><td>' + esc(x.info || '') + '</td></tr>').join('') +
+      '</tbody></table></div>' +
+      (i.n > LIMIT ? '<p class="muted">يُعرض أول ' + LIMIT + ' سطرًا من ' + fmtNum(i.n) + '.</p>' : '') +
+      '</details>';
+  }).join('') + '</div>';
 }
 
 function clientItem(code, name, region, valueLabel, warn) {

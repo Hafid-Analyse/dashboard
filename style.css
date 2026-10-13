@@ -539,3 +539,12 @@ details summary { cursor: pointer; color: var(--text-muted); }
   .big-number { font-size: 38px; }
   .region-table th, .region-table td { padding: 9px 8px; }
 }
+
+/* تقرير جودة البيانات: تفاصيل الأسطر */
+.dq-item { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 8px 12px; margin: 6px 0; }
+.dq-item > summary { display: flex; justify-content: space-between; align-items: center; gap: 8px; cursor: pointer; list-style: none; font-size: 13px; }
+.dq-item > summary::-webkit-details-marker { display: none; }
+.dq-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+.dq-table th, .dq-table td { padding: 5px 6px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+.dq-table td:nth-child(3) { white-space: normal; }
+.dq-item .table-wrap { max-height: 320px; overflow: auto; }

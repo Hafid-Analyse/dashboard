@@ -1,7 +1,7 @@
 'use strict';
 /* Service worker — يجعل التطبيق يفتح فورًا ودون إنترنت (الهيكل فقط؛ البيانات تُحفظ في IndexedDB من التطبيق نفسه).
    عند رفع نسخة جديدة من الملفات غيّر رقم VERSION ليتجدد الكاش عند المستخدمين. */
-const VERSION = 'v1';
+const VERSION = 'v2';
 const CACHE = 'ceo-dashboard-' + VERSION;
 const SHELL = [
   './', 'index.html', 'style.css', 'config.js', 'data.js', 'charts.js', 'pages.js', 'clients.js', 'main.js',
